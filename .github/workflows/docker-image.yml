@@ -1,0 +1,60 @@
+# This workflow builds and pushes a Docker image to Docker Hub.
+#
+# Name of the workflow
+name: Docker Image CI/CD
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the "main" branch
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This job builds and pushes the image
+  build-and-push:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # 1. Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Sets up the Docker Buildx builder instance
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Logs in to Docker Hub
+      #    This step is conditional and only runs on a push event to the main branch.
+      #    You must create secrets in your GitHub repository settings named DOCKERHUB_USERNAME and DOCKERHUB_TOKEN.
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 4. Extracts metadata (like tags and labels) for the Docker image
+      #    This action automatically creates useful tags. For the main branch, it will create the 'latest' tag.
+      #    It also creates a tag based on the commit SHA for traceability.
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: kirari04/qbittorrent-port-forward-gluetun-server
+
+      # 5. Builds the Docker image and pushes it to Docker Hub
+      #    The 'push' parameter is conditional. It's set to 'true' only for pushes to the main branch.
+      #    For pull requests, this step will only build the image to validate the Dockerfile, but won't push it.
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
