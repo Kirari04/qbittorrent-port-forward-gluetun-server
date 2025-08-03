@@ -47,7 +47,7 @@ jobs:
         with:
           images: kirari04/qbittorrent-port-forward-gluetun-server
           tags: |
-            type=edge
+            type=raw,value=latest,enable={{is_default_branch}}
 
       # 5. Builds the Docker image and pushes it to Docker Hub
       #    The 'push' parameter is conditional. It's set to 'true' only for pushes to the main branch.
