@@ -43,7 +43,7 @@ For this script to read the forwarded port, you must enable Gluetun's HTTP contr
 [[roles]]
 name = "port-forward"
 # Allow access to the port forwarding endpoint
-routes = ["GET /v1/openvpn/portforwarded"]
+routes = ["GET /v1/portforward"]
 auth = "none"
 ```
 

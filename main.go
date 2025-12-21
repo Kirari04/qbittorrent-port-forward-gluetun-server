@@ -97,7 +97,7 @@ func main() {
 }
 
 func getForwardedPort(client *http.Client, gtnAddr string) (int, error) {
-	resp, err := client.Get(gtnAddr + "/v1/openvpn/portforwarded")
+	resp, err := client.Get(gtnAddr + "/v1/portforward")
 	if err != nil {
 		return 0, err
 	}
