@@ -1,6 +1,6 @@
 module kirari04/qbittorrent-port-forward-gluetun-server
 
-go 1.25.4
+go 1.25.5
 
 require github.com/tidwall/gjson v1.18.0
 
