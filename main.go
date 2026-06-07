@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"strconv"
@@ -14,16 +13,18 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func main() {
-	// Environment variables with default values
-	qbtUsername := os.Getenv("QBT_USERNAME")
-	if qbtUsername == "" {
-		qbtUsername = "admin"
+type config struct {
+	qbtAPIKey string
+	qbtAddr   string
+	gtnAddr   string
+}
+
+func loadConfig() (config, error) {
+	qbtAPIKey := strings.TrimSpace(os.Getenv("QBT_API_KEY"))
+	if qbtAPIKey == "" {
+		return config{}, fmt.Errorf("QBT_API_KEY is required")
 	}
-	qbtPassword := os.Getenv("QBT_PASSWORD")
-	if qbtPassword == "" {
-		qbtPassword = "adminadmin"
-	}
+
 	qbtAddr := os.Getenv("QBT_ADDR")
 	if qbtAddr == "" {
 		qbtAddr = "http://localhost:8080"
@@ -33,9 +34,21 @@ func main() {
 		gtnAddr = "http://localhost:8000"
 	}
 
-	// Create a cookie jar to store cookies
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
+	return config{
+		qbtAPIKey: qbtAPIKey,
+		qbtAddr:   qbtAddr,
+		gtnAddr:   gtnAddr,
+	}, nil
+}
+
+func main() {
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Println("Invalid configuration:", err)
+		os.Exit(1)
+	}
+
+	client := &http.Client{}
 	nth := 0
 	// Run the logic every 30 seconds
 	for {
@@ -49,7 +62,7 @@ func main() {
 
 		// Get the forwarded port from gluetun
 		fmt.Println("Getting forwarded port from gluetun")
-		portNumber, err := getForwardedPort(client, gtnAddr)
+		portNumber, err := getForwardedPort(client, cfg.gtnAddr)
 		if err != nil {
 			fmt.Println("Could not get current forwarded port from gluetun:", err)
 			continue // Continue to the next iteration
@@ -60,18 +73,9 @@ func main() {
 		}
 		fmt.Println("Forwarded port:", portNumber)
 
-		// Login to qBittorrent
-		fmt.Println("Logging in to qBittorrent")
-		err = loginToQbittorrent(client, qbtAddr, qbtUsername, qbtPassword)
-		if err != nil {
-			fmt.Println("Could not login to qBittorrent:", err)
-			continue // Continue to the next iteration
-		}
-		fmt.Println("Logged in to qBittorrent")
-
 		// Get the current listen port from qBittorrent
 		fmt.Println("Getting current listen port from qBittorrent")
-		listenPort, err := getListenPort(client, qbtAddr)
+		listenPort, err := getListenPort(client, cfg.qbtAddr, cfg.qbtAPIKey)
 		if err != nil {
 			fmt.Println("Could not get current listen port:", err)
 			continue // Continue to the next iteration
@@ -86,7 +90,7 @@ func main() {
 
 		// Update the listen port in qBittorrent
 		fmt.Printf("Updating port to %d\n", portNumber)
-		err = updateListenPort(client, qbtAddr, portNumber)
+		err = updateListenPort(client, cfg.qbtAddr, cfg.qbtAPIKey, portNumber)
 		if err != nil {
 			fmt.Println("Could not update listen port:", err)
 			continue // Continue to the next iteration
@@ -119,38 +123,36 @@ func getForwardedPort(client *http.Client, gtnAddr string) (int, error) {
 	return port, nil
 }
 
-func loginToQbittorrent(client *http.Client, qbtAddr, username, password string) error {
-	resp, err := client.PostForm(qbtAddr+"/api/v2/auth/login", url.Values{
-		"username": {username},
-		"password": {password},
-	})
+func newQbittorrentRequest(method, qbtAddr, path, apiKey string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, qbtAddr+path, body)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	return req, nil
+}
+
+func getListenPort(client *http.Client, qbtAddr, apiKey string) (int, error) {
+	req, err := newQbittorrentRequest(http.MethodGet, qbtAddr, "/api/v2/app/preferences", apiKey, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("login failed with status code %d\n %s", resp.StatusCode, string(body))
-	}
-
-	return nil
-}
-
-func getListenPort(client *http.Client, qbtAddr string) (int, error) {
-	resp, err := client.Get(qbtAddr + "/api/v2/app/preferences")
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to get listen port with status code %d\n %s", resp.StatusCode, string(body))
 	}
 
 	portStr := gjson.GetBytes(body, "listen_port").String()
@@ -162,16 +164,16 @@ func getListenPort(client *http.Client, qbtAddr string) (int, error) {
 	return port, nil
 }
 
-func updateListenPort(client *http.Client, qbtAddr string, portNumber int) error {
+func updateListenPort(client *http.Client, qbtAddr, apiKey string, portNumber int) error {
 	data := url.Values{}
 	data.Set("json", fmt.Sprintf(`{"listen_port": %d}`, portNumber))
 
-	req, err := http.NewRequest(http.MethodPost, qbtAddr+"/api/v2/app/setPreferences", strings.NewReader(data.Encode()))
+	req, err := newQbittorrentRequest(http.MethodPost, qbtAddr, "/api/v2/app/setPreferences", apiKey, strings.NewReader(data.Encode()))
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded") // Correct content type
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := client.Do(req)
 	if err != nil {

@@ -20,10 +20,13 @@ The container is configured using the following environment variables:
 
 | Variable | Description | Default | Required |
 | :--- | :--- | :--- | :--- |
-| `QBT_USERNAME` | Your qBittorrent WebUI username. | `admin` | No |
-| `QBT_PASSWORD` | Your qBittorrent WebUI password. | `adminadmin` | No |
-| `QBT_ADDR` | The full HTTP URL for the qBittorrent WebUI. | `http://localhost:8080` | **Yes** |
-| `GTN_ADDR` | The full HTTP URL for the Gluetun control server. | `http://localhost:8000` | **Yes** |
+| `QBT_API_KEY` | Your qBittorrent WebAPI key. | None | **Yes** |
+| `QBT_ADDR` | The full HTTP URL for the qBittorrent WebUI. | `http://localhost:8080` | No |
+| `GTN_ADDR` | The full HTTP URL for the Gluetun control server. | `http://localhost:8000` | No |
+
+qBittorrent API-key authentication requires qBittorrent `>= 5.2.0` or WebAPI `>= 2.14.1`.
+Generate the key in qBittorrent under **Preferences -> WebUI -> API Key**.
+This utility sends the key as an `Authorization: Bearer <key>` header and does not call qBittorrent's auth endpoints.
 
 ---
 
@@ -103,9 +106,8 @@ services:
       - QBT_ADDR=http://gluetun:8112
       # Use the service name for the Gluetun control server
       - GTN_ADDR=http://gluetun:8000
-      # Optional: qBittorrent credentials if not using defaults
-      # - QBT_USERNAME=xxxx
-      # - QBT_PASSWORD=xxxxxxxxxxxxxx
+      # Required: qBittorrent API key generated in Preferences -> WebUI -> API Key
+      - QBT_API_KEY=qbt_XXXXXXXXXXXXXXXXXXXXXXXXXXXX
     depends_on:
       - gluetun
       - qbittorrent
@@ -131,8 +133,7 @@ docker build . -t kirari04/qbittorrent-port-forward-gluetun-server:latest
 
 ```bash
 docker run --rm -it \
-  -e QBT_USERNAME=admin \
-  -e QBT_PASSWORD=adminadmin \
+  -e QBT_API_KEY=qbt_XXXXXXXXXXXXXXXXXXXXXXXXXXXX \
   -e QBT_ADDR=http://192.168.1.100:8080 \
   -e GTN_ADDR=http://192.168.1.100:8000 \
   kirari04/qbittorrent-port-forward-gluetun-server:latest
