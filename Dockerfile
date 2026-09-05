@@ -16,7 +16,7 @@ COPY . .
 RUN go build -o main .
 
 # Use a smaller base image for the final image
-FROM alpine:latest
+FROM scratch as minimal
 
 WORKDIR /app
 
