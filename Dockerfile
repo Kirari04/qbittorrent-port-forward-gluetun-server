@@ -15,7 +15,7 @@ COPY . .
 RUN go test ./...
 
 # Build the Go application
-RUN go build -o main .
+RUN go build -o /app/main .
 
 # Use a smaller base image for the final image
 FROM scratch AS minimal
