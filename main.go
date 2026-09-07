@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/tidwall/gjson"
+	_ "golang.org/x/crypto/x509roots/fallback" // Embeds x509root certificates into the binary
 )
 
 type config struct {
