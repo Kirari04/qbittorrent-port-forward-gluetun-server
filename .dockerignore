@@ -1,6 +1,8 @@
-# Only application sources and module metadata are needed by the builder.
+# ignore everything
 **
+
+# include what we need
 !go.mod
 !go.sum
 !*.go
-!Dockerfile
+!LICENSE

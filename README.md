@@ -18,11 +18,13 @@ This project is a Go rewrite of the original shell script by [@mjmeli](https://g
 
 The container is configured using the following environment variables:
 
-| Variable | Description | Default | Required |
-| :--- | :--- | :--- | :--- |
-| `QBT_API_KEY` | Your qBittorrent WebAPI key. | None | **Yes** |
-| `QBT_ADDR` | The full HTTP URL for the qBittorrent WebUI. | `http://localhost:8080` | No |
-| `GTN_ADDR` | The full HTTP URL for the Gluetun control server. | `http://localhost:8000` | No |
+| Variable         | Description                                       | Default                 | Required |
+|:-----------------|:--------------------------------------------------|:------------------------|:---------|
+| `QBT_API_KEY`    | Your qBittorrent WebAPI key.                      | None                    | **Yes**  |
+| `QBT_ADDR`       | The full HTTP URL for the qBittorrent WebUI.      | `http://localhost:8080` | No       |
+| `GTN_API_KEY`    | Your gluetun control server api key.              | None                    | No       |
+| `GTN_ADDR`       | The full HTTP URL for the Gluetun control server. | `http://localhost:8000` | No       |
+| `DELAY_DURATION` | The time to wait between setting the port number. | `1m`                    | No       |
 
 qBittorrent API-key authentication requires qBittorrent `>= 5.2.0` or WebAPI `>= 2.14.1`.
 Generate the key in qBittorrent under **Preferences -> WebUI -> API Key**.
@@ -38,16 +40,18 @@ This is an example of how to integrate this utility with `gluetun` and `qbittorr
 
 For this script to read the forwarded port, you must enable Gluetun's HTTP control server and give this utility permission to access the port information.
 
-1.  **Enable Control Server:** You must set the `HTTP_CONTROL_SERVER_ADDRESS` environment variable in your `gluetun` service.
-2.  **Create Auth Config:** The control server needs a `config.toml` file to define access rules. Create this file in a directory on your host that you will mount into the container (e.g., `./gluetun-data/auth/config.toml`).
+1. **Enable Control Server:** You must set the `HTTP_CONTROL_SERVER_ADDRESS` environment variable in your `gluetun` service.
+2. **Create Auth Config:** The control server needs a `config.toml` file to define access rules. Create this file in a directory on your host that you will mount into the container (e.g., `./gluetun-data/auth/config.toml`).
 
-    **`config.toml` content:**
-```
+   **`config.toml` content:**
+
+```toml
 [[roles]]
 name = "port-forward"
 # Allow access to the port forwarding endpoint
 routes = ["GET /v1/portforward"]
-auth = "none"
+auth = "apikey"
+apikey = "your_api_key_here"
 ```
 
 ### Docker-Compose Example

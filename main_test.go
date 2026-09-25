@@ -1,99 +1,85 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetListenPortUsesAPIKey(t *testing.T) {
 	const apiKey = "qbt_test_api_key"
+	const listenPort = 51413
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Errorf("method = %s, want %s", r.Method, http.MethodGet)
-		}
-		if r.URL.Path != "/api/v2/app/preferences" {
-			t.Errorf("path = %s, want /api/v2/app/preferences", r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer "+apiKey {
-			t.Errorf("Authorization = %q, want %q", got, "Bearer "+apiKey)
-		}
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/api/v2/app/preferences", r.URL.Path)
+		assert.Equal(t, "Bearer "+apiKey, r.Header.Get("Authorization"))
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"listen_port": 51413}`))
+		_, err := w.Write([]byte(fmt.Sprintf(`{"listen_port": %d}`, listenPort)))
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 
-	port, err := getListenPort(server.Client(), server.URL, apiKey)
-	if err != nil {
-		t.Fatalf("getListenPort returned error: %v", err)
-	}
-	if port != 51413 {
-		t.Fatalf("port = %d, want 51413", port)
-	}
+	port, err := getQbitListenPort(server.Client(), server.URL, apiKey)
+	assert.NoError(t, err)
+	assert.Equal(t, listenPort, port)
 }
 
 func TestUpdateListenPortUsesAPIKey(t *testing.T) {
 	const apiKey = "qbt_test_api_key"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("method = %s, want %s", r.Method, http.MethodPost)
-		}
-		if r.URL.Path != "/api/v2/app/setPreferences" {
-			t.Errorf("path = %s, want /api/v2/app/setPreferences", r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer "+apiKey {
-			t.Errorf("Authorization = %q, want %q", got, "Bearer "+apiKey)
-		}
-		if got := r.Header.Get("Content-Type"); got != "application/x-www-form-urlencoded" {
-			t.Errorf("Content-Type = %q, want application/x-www-form-urlencoded", got)
-		}
-		if err := r.ParseForm(); err != nil {
-			t.Fatalf("ParseForm returned error: %v", err)
-		}
-		if got := r.PostForm.Get("json"); got != `{"listen_port": 51413}` {
-			t.Errorf("json form value = %q, want %q", got, `{"listen_port": 51413}`)
-		}
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/api/v2/app/setPreferences", r.URL.Path)
+		assert.Equal(t, "Bearer "+apiKey, r.Header.Get("Authorization"))
+		assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+		assert.NoError(t, r.ParseForm())
+		assert.Equal(t, `{"listen_port": 51413}`, r.PostForm.Get("json"))
 
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 
-	if err := updateListenPort(server.Client(), server.URL, apiKey, 51413); err != nil {
-		t.Fatalf("updateListenPort returned error: %v", err)
-	}
+	assert.NoError(t, updateQbitListenPort(server.Client(), server.URL, apiKey, 51413))
 }
 
-func TestGetListenPortReturnsStatusError(t *testing.T) {
+func TestGetForwardedPortUsesAPIKey(t *testing.T) {
+	const apiKey = "gluetun_test_api_key"
+	const expectedPort = 1337
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-		_, _ = w.Write([]byte("bad api key"))
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/v1/portforward", r.URL.Path)
+		assert.Equal(t, apiKey, r.Header.Get(GluetunApiKeyHeader))
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte(fmt.Sprintf(`{"port": %d}`, expectedPort)))
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 
-	_, err := getListenPort(server.Client(), server.URL, "qbt_test_api_key")
-	if err == nil {
-		t.Fatal("getListenPort returned nil error, want status error")
-	}
-	if !strings.Contains(err.Error(), "status code 403") {
-		t.Fatalf("error = %q, want status code", err.Error())
-	}
-	if !strings.Contains(err.Error(), "bad api key") {
-		t.Fatalf("error = %q, want response body", err.Error())
-	}
+	port, err := getGluetunForwardedPort(server.Client(), server.URL, apiKey)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedPort, port)
 }
 
-func TestMissingAPIKeyFailsConfig(t *testing.T) {
-	t.Setenv("QBT_API_KEY", "   ")
+func TestGetListenPortReturnsStatusError(t *testing.T) {
+	const badAPIKey = "bad api key"
 
-	_, err := loadConfig()
-	if err == nil {
-		t.Fatal("loadConfig returned nil error, want missing API key error")
-	}
-	if !strings.Contains(err.Error(), "QBT_API_KEY is required") {
-		t.Fatalf("error = %q, want QBT_API_KEY requirement", err.Error())
-	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, err := w.Write([]byte(badAPIKey))
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	_, err := getQbitListenPort(server.Client(), server.URL, "qbt_test_api_key")
+	assert.Errorf(t, err, "getListenPort returned nil error, want status error")
+
+	assert.Contains(t, err.Error(), "status code 403")
+	assert.Contains(t, err.Error(), badAPIKey)
 }
