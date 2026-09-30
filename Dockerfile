@@ -7,26 +7,26 @@ ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY *.go ./
+COPY . .
+
 RUN go test ./... && go vet ./...
+
 RUN go build -trimpath -mod=readonly -o /out/main .
+RUN go test -c -tags=container -o /out/container-tests .
 
 FROM scratch AS runtime
 
 # Use the distribution's trust store without adding certificate code to the app.
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /out/main /app/main
+COPY --from=builder /src/LICENSE /LICENSE
 
 USER 65532:65532
 WORKDIR /app
 CMD ["/app/main"]
 
-# Run the actual application in its runtime filesystem during container tests.
-FROM builder AS test-builder
-RUN go test -c -tags=container -o /out/container-tests .
-
 FROM runtime AS container-test
-COPY --from=test-builder /out/container-tests /app/container-tests
+COPY --from=builder /out/container-tests /app/container-tests
 CMD ["/app/container-tests", "-test.v", "-test.run=^TestContainer", "-test.timeout=60s"]
 
 # Keep the default build free of the test executable.
