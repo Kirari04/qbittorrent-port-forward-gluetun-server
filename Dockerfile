@@ -1,5 +1,5 @@
 # Dependabot tracks both the version and digest, including CA bundle updates.
-FROM golang:1.27.1-alpine3.24@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
+FROM golang:1.27.2-alpine3.24@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS builder
 
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
